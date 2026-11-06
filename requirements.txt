@@ -1,0 +1,8 @@
+# Direct dependencies besides PyTorch (see ROCm/README.md). TODO: pin the versions from your environment:
+#   pip freeze | findstr /i "numpy tokenizers pyarrow datasets huggingface matplotlib"
+numpy
+tokenizers
+pyarrow
+datasets
+huggingface_hub
+matplotlib
