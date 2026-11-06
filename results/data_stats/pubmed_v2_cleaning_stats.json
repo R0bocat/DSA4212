@@ -1,0 +1,84 @@
+{
+ "dropped": {
+  "val": {
+   "tiny_doc": 2,
+   "not_english": 13,
+   "low_alpha": 3
+  },
+  "train": {
+   "not_english": 1210,
+   "tiny_doc": 612,
+   "duplicate": 381,
+   "low_alpha": 87,
+   "word_length": 9,
+   "non_ascii": 129,
+   "short": 8
+  },
+  "test": {}
+ },
+ "groups": {
+  "test": {
+   "sample/10BT": [
+    1481,
+    7477622
+   ]
+  },
+  "val": {
+   "sample/10BT": [
+    1456,
+    6815706
+   ]
+  },
+  "train": {
+   "sample/10BT": [
+    355172,
+    1677729417
+   ]
+  }
+ },
+ "splits": {
+  "test": {
+   "docs": 1481,
+   "chars": 7440772
+  },
+  "val": {
+   "docs": 1456,
+   "chars": 6783734
+  },
+  "train": {
+   "docs": 355172,
+   "chars": 1669212154
+  }
+ },
+ "args": {
+  "src": "data/fineweb_raw",
+  "out": "data/fineweb_v1",
+  "include": [],
+  "exclude": [],
+  "text_field": "text",
+  "split_by": "chunk",
+  "chunk_chars": 20000,
+  "group_depth": 2,
+  "val_frac": 0.002,
+  "test_frac": 0.002,
+  "seed": 1337,
+  "max_para_chars": 100000,
+  "min_words": 8,
+  "min_doc_chars": 300,
+  "min_stop": 0.15,
+  "min_alpha": 0.8,
+  "filters": "minimal",
+  "max_nonascii": 0.05,
+  "max_word_len": 24,
+  "max_digit": 0.05,
+  "max_mixed": 0.02,
+  "keep_linebreaks": false,
+  "max_file_mb": 1000,
+  "vocab_size": 8192,
+  "tok_train_mb": 500,
+  "tokenizer": null,
+  "skip_clean": false,
+  "clean_only": true,
+  "max_train_mb": 1600.0
+ }
+}

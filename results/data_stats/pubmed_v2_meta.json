@@ -1,0 +1,24 @@
+{
+ "vocab_size": 8192,
+ "eos_id": 0,
+ "dtype": "uint16",
+ "train_order": "documents shuffled; any prefix of train.bin is a random sample of documents",
+ "train": {
+  "docs": 1706686,
+  "tokens": 550932825,
+  "bytes": 2293103582
+ },
+ "val": {
+  "docs": 3473,
+  "tokens": 1115264,
+  "bytes": 4639472,
+  "tokens_per_byte": 0.24038597495577083
+ },
+ "test": {
+  "docs": 3416,
+  "tokens": 1086850,
+  "bytes": 4526824,
+  "tokens_per_byte": 0.2400910660542579
+ },
+ "bits_per_byte_formula": "bpb = mean_loss_nats_per_token / ln(2) * tokens_per_byte"
+}

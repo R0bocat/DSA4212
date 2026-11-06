@@ -1,0 +1,88 @@
+{
+ "dropped": {
+  "test": {
+   "tiny_doc": 40,
+   "short": 2,
+   "not_english": 2,
+   "word_length": 1,
+   "low_alpha": 1
+  },
+  "val": {
+   "tiny_doc": 27,
+   "duplicate": 1,
+   "not_english": 1
+  },
+  "train": {
+   "not_english": 545,
+   "tiny_doc": 68009,
+   "duplicate": 52072,
+   "short": 536,
+   "word_length": 98,
+   "low_alpha": 55,
+   "non_ascii": 1
+  }
+ },
+ "groups": {
+  "test": {
+   "data/PubMed Abstracts": [
+    3417,
+    4528705
+   ]
+  },
+  "val": {
+   "data/PubMed Abstracts": [
+    3474,
+    4640411
+   ]
+  },
+  "train": {
+   "data/PubMed Abstracts": [
+    1706686,
+    2293103582
+   ]
+  }
+ },
+ "splits": {
+  "test": {
+   "docs": 3417,
+   "chars": 4527067
+  },
+  "val": {
+   "docs": 3474,
+   "chars": 4638878
+  },
+  "train": {
+   "docs": 1706686,
+   "chars": 2292232424
+  }
+ },
+ "args": {
+  "src": "data/pubmed_raw",
+  "out": "data/pubmed_v2",
+  "include": [],
+  "exclude": [],
+  "text_field": "text",
+  "split_by": "chunk",
+  "chunk_chars": 20000,
+  "group_depth": 2,
+  "val_frac": 0.002,
+  "test_frac": 0.002,
+  "seed": 1337,
+  "max_para_chars": 100000,
+  "min_words": 8,
+  "min_doc_chars": 300,
+  "min_stop": 0.15,
+  "min_alpha": 0.8,
+  "filters": "minimal",
+  "max_nonascii": 0.05,
+  "max_word_len": 24,
+  "max_digit": 0.05,
+  "max_mixed": 0.02,
+  "keep_linebreaks": false,
+  "max_file_mb": 1000,
+  "vocab_size": 8192,
+  "tok_train_mb": 500,
+  "tokenizer": null,
+  "skip_clean": false
+ }
+}
