@@ -1,0 +1,20 @@
+# ---- data and checkpoints are far too large for GitHub (regenerate with the readme steps) ----
+data/*
+!data/.gitkeep
+runs/*/best.pt
+*.pt
+*.bin
+*.npz
+*.bak
+code/generate.py
+
+# ---- local environment ----
+__pycache__/
+*.pyc
+.venv*/
+RCOm-windows-gfx1030/
+.cache/
+.env
+
+# NOTE: do NOT ignore *.json / *.jsonl / *.csv -- runs/*/summary.json, runs/*/log.jsonl and results/*.csv are the
+# saved numerical results and are small.
