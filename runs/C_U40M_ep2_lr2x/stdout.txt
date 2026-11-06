@@ -1,0 +1,42 @@
+C:\Users\jacob\Documents\DSA4212\train.py:70: UserWarning: 1Torch was not compiled with memory efficient attention. (Triggered internally at B:\src\torch\aten\src\ATen\native\transformers\hip\sdp_utils.cpp:823.)
+  y = F.scaled_dot_product_attention(q, k, v, is_causal=True, dropout_p=self.p if self.training else 0.0)
+run C_U40M_ep2_lr2x | AMD Radeon RX 6900 XT | torch 2.10.0+rocm7.12.0a20260204 (hip=7.2.0)
+model small: 13.9M params | steps 9,765 x 8,192 tokens = 80M tokens | dtype fp16
+domain train tokens available: 40.0M | domain frac 1.0 | general train tokens: 430.7M
+step    500 |    4.1M tok | lr 2.00e-03 | train 5.778 | val dom bpb 1.7139 | gap +0.011 | gen bpb 2.4054 | ep 0.1 | 0.7 min *
+step   1000 |    8.2M tok | lr 1.97e-03 | train 4.542 | val dom bpb 1.4634 | gap +0.023 | gen bpb 2.2259 | ep 0.2 | 1.3 min *
+step   1500 |   12.3M tok | lr 1.92e-03 | train 4.008 | val dom bpb 1.3558 | gap +0.029 | gen bpb 2.1310 | ep 0.3 | 2.0 min *
+step   2000 |   16.4M tok | lr 1.85e-03 | train 3.788 | val dom bpb 1.3021 | gap +0.042 | gen bpb 2.0674 | ep 0.4 | 2.7 min *
+step   2500 |   20.5M tok | lr 1.75e-03 | train 3.659 | val dom bpb 1.2687 | gap +0.042 | gen bpb 2.0605 | ep 0.5 | 3.3 min *
+step   3000 |   24.6M tok | lr 1.64e-03 | train 3.557 | val dom bpb 1.2418 | gap +0.055 | gen bpb 2.0293 | ep 0.6 | 4.0 min *
+step   3500 |   28.7M tok | lr 1.52e-03 | train 3.492 | val dom bpb 1.2204 | gap +0.060 | gen bpb 1.9980 | ep 0.7 | 4.6 min *
+step   4000 |   32.8M tok | lr 1.38e-03 | train 3.426 | val dom bpb 1.2019 | gap +0.067 | gen bpb 1.9739 | ep 0.8 | 5.3 min *
+step   4500 |   36.9M tok | lr 1.24e-03 | train 3.378 | val dom bpb 1.1839 | gap +0.075 | gen bpb 1.9599 | ep 0.9 | 5.9 min *
+step   5000 |   41.0M tok | lr 1.09e-03 | train 3.322 | val dom bpb 1.1684 | gap +0.076 | gen bpb 1.9428 | ep 1.0 | 6.6 min *
+step   5500 |   45.1M tok | lr 9.47e-04 | train 3.271 | val dom bpb 1.1539 | gap +0.074 | gen bpb 1.9266 | ep 1.1 | 7.2 min *
+step   6000 |   49.2M tok | lr 8.05e-04 | train 3.227 | val dom bpb 1.1392 | gap +0.090 | gen bpb 1.9184 | ep 1.2 | 7.9 min *
+step   6500 |   53.2M tok | lr 6.70e-04 | train 3.183 | val dom bpb 1.1275 | gap +0.093 | gen bpb 1.9095 | ep 1.3 | 8.5 min *
+step   7000 |   57.3M tok | lr 5.46e-04 | train 3.137 | val dom bpb 1.1151 | gap +0.100 | gen bpb 1.8935 | ep 1.4 | 9.2 min *
+step   7500 |   61.4M tok | lr 4.38e-04 | train 3.108 | val dom bpb 1.1048 | gap +0.097 | gen bpb 1.8876 | ep 1.5 | 9.9 min *
+step   8000 |   65.5M tok | lr 3.47e-04 | train 3.072 | val dom bpb 1.0956 | gap +0.100 | gen bpb 1.8755 | ep 1.6 | 10.5 min *
+step   8500 |   69.6M tok | lr 2.77e-04 | train 3.043 | val dom bpb 1.0884 | gap +0.104 | gen bpb 1.8641 | ep 1.7 | 11.2 min *
+step   9000 |   73.7M tok | lr 2.28e-04 | train 3.019 | val dom bpb 1.0826 | gap +0.103 | gen bpb 1.8585 | ep 1.8 | 11.8 min *
+step   9500 |   77.8M tok | lr 2.03e-04 | train 3.004 | val dom bpb 1.0782 | gap +0.102 | gen bpb 1.8580 | ep 1.9 | 12.5 min *
+step   9765 |   80.0M tok | lr 2.00e-04 | train 2.990 | val dom bpb 1.0771 | gap +0.108 | gen bpb 1.8592 | ep 2.0 | 12.9 min *
+
+=== summary ===
+  steps_done                9765
+  tokens_done               79994880
+  total_minutes             12.8875
+  eval_minutes              2.7556
+  train_tokens_per_sec      131,588.8014
+  domain_epochs             1.9999
+  best_step                 9765
+  best_val_domain_bpb       1.0771
+  best_test_domain_bpb      1.0691
+  final_test_domain_bpb     1.0691
+  best_test_general_bpb     1.8304
+  final_test_general_bpb    1.8304
+  diverged                  False
+  truncated_by_time         False
+  saved to runs\C_U40M_ep2_lr2x/
