@@ -4,11 +4,13 @@ analyze_similarity.py - figures for the similarity extension.
   python run_queue.py --summarize
   python analyze_similarity.py runs/results.csv --pools data/fw_pools/pools_summary.json --scores data/similarity/scores.npz
 
-fig7_similarity.png : PubMed test bpb (left) and FineWeb-Edu test bpb (right) against how PubMed-like the general pool is.
-                      One line per (U, delta) configuration; seeds shown as small dots. Reference band = the same cell
-                      trained with the full, unselected general corpus (3 seeds where available).
-fig8_sim_distribution.png : what the similarity score means - distribution for FineWeb-Edu documents and PubMed documents,
-                      with the pool boundaries.
+fig7_similarity.png : one row per (U, delta) configuration, two columns (domain bpb, general bpb). The x axis is the
+                      pool ranking from least to most similar to the domain, plus the random control; the dashed line is
+                      the random pool, the dotted line the same cell trained on the full unselected corpus.
+fig8_sim_distribution.png : what the similarity score means - the token-weighted distribution of FineWeb-Edu documents,
+                      the equal-token pool boundaries, and where the PubMed / FineWeb-Edu validation documents sit.
+                      Pass --scores only for the quartile run, and give --dist-name a distinct value for any other
+                      pool set, otherwise the two runs overwrite the same file.
 """
 import argparse
 import collections
@@ -27,7 +29,10 @@ import numpy as np
 M = 1_000_000
 POOL_RE = re.compile(r"^P_U(?P<U>\w+?)_d(?P<d>[\d.]+)_(?P<pool>[qd]\d+|d?rnd)_s(?P<seed>\d+)$")
 COLORS = ["#d62728", "#1f77b4", "#2ca02c", "#9467bd"]
-plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False, "figure.dpi": 130})
+GREY = "#555555"
+plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False, "figure.dpi": 130,
+                     "axes.titlesize": 10.5, "axes.titleweight": "semibold", "axes.labelsize": 9.5,
+                     "legend.fontsize": 8.5, "xtick.labelsize": 9, "ytick.labelsize": 9})
 
 
 def records_from_csv(path):
@@ -76,46 +81,66 @@ def check_stale(path):
 
 
 def fig_similarity(pool_rows, ref, summ, out):
+    """One row per (U, delta) configuration, two columns: domain bpb and general bpb.
+    x = the four equal-token pools ordered from least to most PubMed-like, plus the random control."""
     cfgs = sorted({(r["U"], r["delta"]) for r in pool_rows})
-    fig, ax = plt.subplots(1, 2, figsize=(11.5, 4.4))
-    for ci, (U, d) in enumerate(cfgs):
-        color = COLORS[ci % len(COLORS)]
+    if not cfgs:
+        return
+    pools = summ["pools"]
+    qs_all = sorted((p for p in pools if not p.endswith("rnd")), key=lambda p: pools[p]["mean_sim"])
+    rnd = next((p for p in pools if p.endswith("rnd")), None)
+    if not qs_all:
+        return
+    nrow = len(cfgs)
+    fig, axes = plt.subplots(nrow, 2, figsize=(11.2, 3.4 * nrow), squeeze=False)
+    for i, (U, d) in enumerate(cfgs):
         rows = [r for r in pool_rows if (r["U"], r["delta"]) == (U, d)]
-        by_pool = collections.defaultdict(list)
+        by = collections.defaultdict(list)
         for r in rows:
-            by_pool[r["pool"]].append(r)
-        for a_, key in ((ax[0], "dom"), (ax[1], "gen")):
-            qs = sorted((p for p in by_pool if not p.endswith("rnd") and p in summ["pools"]), key=lambda p: summ["pools"][p]["mean_sim"])
-            rnd = next((p for p in by_pool if p.endswith("rnd") and p in summ["pools"]), None)
-            xs = [summ["pools"][p]["mean_sim"] for p in qs]
-            ys = [st.mean(r[key] for r in by_pool[p]) for p in qs]
-            a_.plot(xs, ys, marker="o", color=color, lw=1.6, label=f"U={U // M}M, δ={d:g}")
-            for p in qs:
-                x = summ["pools"][p]["mean_sim"]
-                if len(by_pool[p]) > 1:
-                    a_.scatter([x] * len(by_pool[p]), [r[key] for r in by_pool[p]], color=color, s=12, alpha=0.5, zorder=3)
-                a_.annotate(p, (x, st.mean(r[key] for r in by_pool[p])), textcoords="offset points", xytext=(4, 5), fontsize=7, color=color)
-            if rnd:  # quantity-matched random control
-                a_.scatter([summ["pools"][rnd]["mean_sim"]], [st.mean(r[key] for r in by_pool[rnd])], marker="D", s=55,
-                           facecolors="white", edgecolors=color, zorder=4, label="random pool (same size)" if ci == 0 and key == "dom" else None)
+            by[r["pool"]].append(r)
+        qs = [p for p in qs_all if p in by]  # only the pools that were actually trained
+        xs = list(range(len(qs)))
+        x_rnd = len(qs) + 0.7
+        color = COLORS[i % len(COLORS)]
+        for j, (key, ylab) in enumerate((("dom", "PubMed test bits/byte"), ("gen", "FineWeb-Edu test bits/byte"))):
+            a = axes[i][j]
+            ys = [st.mean(r[key] for r in by[p]) for p in qs if p in by]
+            xk = [x for x, p in zip(xs, qs) if p in by]
+            a.plot(xk, ys, marker="o", color=color, lw=1.9, ms=8, mec="white", mew=1.0, zorder=3)
+            for x, y, p in zip(xk, ys, [p for p in qs if p in by]):
+                a.annotate(f"{y:.3f}", (x, y), textcoords="offset points", xytext=(0, 11), ha="center", fontsize=8,
+                           color=color, zorder=5,
+                           bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.85))
+            if rnd and rnd in by:
+                yr = st.mean(r[key] for r in by[rnd])
+                a.axhline(yr, color=GREY, ls=(0, (4, 3)), lw=1.2, zorder=1)
+                a.scatter([x_rnd], [yr], marker="D", s=70, facecolors="white", edgecolors=GREY, lw=1.5, zorder=4)
+                a.annotate(f"random\n{yr:.3f}", (x_rnd, yr), textcoords="offset points", xytext=(0, 13), ha="center",
+                           fontsize=8, color=GREY, zorder=5,
+                           bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.85))
             full = ref.get((U, d))
-            if full:  # same cell with the full, unselected corpus
-                vals = [r[key] for r in full]
-                m = st.mean(vals)
-                a_.axhline(m, color=color, ls=":", lw=1)
-                if len(vals) > 1:
-                    a_.axhspan(m - st.stdev(vals), m + st.stdev(vals), color=color, alpha=0.08, lw=0)
-    pm = summ.get("refs", {}).get("pubmed")
-    for a_ in ax:  # PubMed itself is far off to the right of every pool: say so instead of hiding the distance
-        if pm:
-            a_.annotate(f"PubMed documents themselves: {pm['mean_sim']:+.2f}  →", xy=(1.0, 0.015), xycoords="axes fraction",
-                        ha="right", fontsize=8, color="#d62728")
-    for a_, t in ((ax[0], "PubMed test bits/byte (lower = better domain model)"), (ax[1], "FineWeb-Edu test bits/byte (general ability)")):
-        a_.set_xlabel("similarity of the general pool to PubMed\n(mean log-likelihood ratio, nats/token; right = more PubMed-like)")
-        a_.set_ylabel(t)
-    ax[0].set_title("Does a more PubMed-like general pool help the domain?\n(dotted = full unselected FineWeb-Edu, band = ±1 seed SD)", fontsize=9)
-    ax[1].set_title("...and what does it cost in general ability?", fontsize=9)
-    ax[0].legend(frameon=False, fontsize=8)
+            if full:
+                vals = [r[key] for r in full if not np.isnan(r[key])]
+                if vals:
+                    a.axhline(st.mean(vals), color=color, ls=":", lw=1.1, alpha=0.8, zorder=1)
+            a.set_xticks(xs + ([x_rnd] if rnd else []))
+            a.set_xticklabels([f"{p}\n{pools[p]['mean_sim']:+.2f}" for p in qs] +
+                              ([f"random\n{pools[rnd]['mean_sim']:+.2f}"] if rnd else []), fontsize=8.5)
+            a.set_xlim(-0.5, x_rnd + 0.9)
+            a.set_ylabel(ylab)
+            a.grid(alpha=0.15, lw=0.6, axis="y")
+            a.margins(y=0.26)
+            if i == 0:
+                a.set_title("Domain ability" if key == "dom" else "General ability")
+            if i == nrow - 1:
+                a.set_xlabel("general pool, least → most PubMed-like")
+        axes[i][0].set_title(f"U = {U // M}M, δ = {d:g}   —   domain ability", fontsize=9.5, color=color)
+        axes[i][1].set_title(f"U = {U // M}M, δ = {d:g}   —   general ability", fontsize=9.5, color=color)
+    if any(ref.get(cfg) for cfg in cfgs):
+        axes[0][0].plot([], [], color=COLORS[0], ls=":", lw=1.1, label="full unselected corpus")
+        axes[0][0].legend(frameon=False, loc="lower left", fontsize=8)
+    fig.suptitle("A more PubMed-like general pool helps the domain but costs general ability\n"
+                 "dashed = random pool of the same size, dotted = full unselected corpus", fontsize=10.5)
     fig.tight_layout()
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
@@ -124,24 +149,58 @@ def fig_similarity(pool_rows, ref, summ, out):
 def fig_distribution(scores_path, summ, out):
     z = np.load(scores_path)
     sim, length = z["sim"], z["length"]
-    fig, ax = plt.subplots(figsize=(7.4, 4.0))
-    lo, hi = np.quantile(sim, [0.002, 0.998])
-    bins = np.linspace(lo, hi, 90)
-    ax.hist(sim, bins=bins, weights=length / length.sum(), color="#1f77b4", alpha=0.6, label="FineWeb-Edu documents (token-weighted)")
-    for k in z.files:
-        if k.startswith("ref_"):
-            ax.hist(np.clip(z[k], lo, hi), bins=bins, weights=np.full(len(z[k]), 1 / len(z[k])), histtype="step", lw=1.6,
-                    color="#d62728" if "pubmed" in k else "#555555", label=f"{k[4:]} validation documents (reference)")
+    pools = summ["pools"]
+    qs = sorted((p for p in pools if not p.endswith("rnd")), key=lambda p: pools[p]["mean_sim"])
     order = np.argsort(-sim)
     cum = np.cumsum(length[order]) / length.sum()
     k = summ["k"]
-    for i in range(1, k):
-        ax.axvline(sim[order][np.searchsorted(cum, i / k)], color="k", ls="--", lw=0.8)
-    ax.set_xlabel("similarity score: NLL(general-only model) − NLL(PubMed-only model), nats/token")
-    ax.set_ylabel("share of tokens / documents")
-    ax.set_title("Where each pool sits (dashed = boundaries of the equal-token pools, q1 = right-most)", fontsize=9)
-    ax.legend(frameon=False, fontsize=8)
-    fig.tight_layout()
+    edges = sorted(sim[order][np.searchsorted(cum, i / k)] for i in range(1, k))
+    lo, hi = np.quantile(sim, [0.001, 0.999])
+    refs = {k: float(np.mean(z[k])) for k in z.files if k.startswith("ref_")}
+    hi = max([hi] + [v + 0.12 for v in refs.values()])
+    fig, (strip, ax) = plt.subplots(2, 1, figsize=(9.6, 5.4), height_ratios=[1.5, 7], sharex=True,
+                                    gridspec_kw={"hspace": 0.06})
+    ax.hist(sim, bins=np.linspace(lo, hi, 150), weights=length / length.sum(), color="#1f77b4", alpha=0.55, lw=0,
+            label="FineWeb-Edu documents (token-weighted)")
+    ax.set_yscale("log")
+    ax.set_ylim(2e-5, 0.4)
+    ax.set_xlim(lo, hi)
+    spans = [lo] + edges + [hi]
+    # with many pools the bands are narrow, so stagger the labels over two rows
+    for i, p in enumerate(qs):
+        a0, a1 = spans[i], spans[i + 1]
+        strip.axvspan(a0, a1, color=plt.cm.Blues(0.25 + 0.15 * (i % 4)), lw=0)
+        strip.text((a0 + a1) / 2, 0.72 if i % 2 == 0 else 0.28, f"{p}\n{pools[p]['mean_sim']:+.2f}",
+                   ha="center", va="center", fontsize=8 if len(qs) > 6 else 8.5)
+        ax.axvline(a0, color=GREY, ls=(0, (4, 3)), lw=0.9, zorder=1)
+    strip.set_ylim(0, 1)
+    strip.set_yticks([])
+    strip.set_title("Where the equal-token pools sit in the similarity distribution", fontsize=10)
+    for sp in ("left", "bottom"):
+        strip.spines[sp].set_visible(False)
+    rnd = next((p for p in pools if p.endswith("rnd")), None)
+    if rnd:
+        xr = pools[rnd]["mean_sim"]
+        ax.axvline(xr, color=GREY, ls=(0, (4, 3)), lw=1.0, zorder=1)
+    for key, color, name in (("ref_fineweb", "#333333", "FineWeb-Edu"), ("ref_pubmed", "#d62728", "PubMed")):
+        if key not in refs:
+            continue
+        ax.axvline(refs[key], color=color, lw=1.8, zorder=5)
+    handles = [plt.Line2D([], [], color="#1f77b4", lw=6, alpha=0.55,
+                          label="FineWeb-Edu documents (token-weighted)")]
+    if "ref_fineweb" in refs:
+        handles.append(plt.Line2D([], [], color="#333333", lw=1.8,
+                                  label=f"FineWeb-Edu validation docs (mean {refs['ref_fineweb']:+.2f})"))
+    if "ref_pubmed" in refs:
+        handles.append(plt.Line2D([], [], color="#d62728", lw=1.8,
+                                  label=f"PubMed validation docs (mean {refs['ref_pubmed']:+.2f})"))
+    if rnd:
+        handles.append(plt.Line2D([], [], color=GREY, ls=(0, (4, 3)), lw=1.0,
+                                  label=f"random pool (mean {pools[rnd]['mean_sim']:+.2f})"))
+    ax.legend(handles=handles, frameon=False, loc="upper left", fontsize=8.5)
+    ax.set_xlabel("similarity score:  NLL(general-only model) − NLL(PubMed-only model)   [nats/token]")
+    ax.set_ylabel("share of tokens (log scale)")
+    ax.grid(alpha=0.15, lw=0.6, axis="y")
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
 
@@ -153,12 +212,16 @@ def main():
     ap.add_argument("--scores", default=None, help="scores.npz from score_similarity.py (for the distribution figure)")
     ap.add_argument("--out", default="figures")
     ap.add_argument("--name", default="fig7_similarity.png", help="file name of the main figure (use another for deciles)")
+    ap.add_argument("--dist-name", default="fig8_sim_distribution.png",
+                    help="file name of the distribution figure; give it a distinct name when --pools is a different "
+                         "pool set (e.g. the deciles), otherwise the two runs overwrite each other")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     with open(a.pools) as f:
         summ = json.load(f)
     check_stale(a.results)
     pool_rows, ref, records = load(a.results)
+    pool_rows = [r for r in pool_rows if r["pool"] in summ["pools"]]
     if pool_rows:
         fig_similarity(pool_rows, ref, summ, os.path.join(a.out, a.name))
         print(f"{len(pool_rows)} pool runs; wrote {a.name}")
@@ -180,8 +243,8 @@ def main():
             print("  none of the runs is a pool run: the file is probably out of date. Run `python run_queue.py --summarize`,\n"
                   "  or pass the runs folder itself:  python analyze_similarity.py runs --pools ...")
     if a.scores:
-        fig_distribution(a.scores, summ, os.path.join(a.out, "fig8_sim_distribution.png"))
-        print("wrote fig8_sim_distribution.png")
+        fig_distribution(a.scores, summ, os.path.join(a.out, a.dist_name))
+        print(f"wrote {a.dist_name}")
 
 
 if __name__ == "__main__":

@@ -23,7 +23,11 @@ U_ORDER = [3 * M, 10 * M, 40 * M, 0]  # the main grid; 0 = all available domain 
 EXT_U = [1 * M, 20 * M]              # extra scarcity levels used only as an out-of-sample test of the delta* rule
 COLORS = {1 * M: "#8c564b", 3 * M: "#d62728", 10 * M: "#ff7f0e", 20 * M: "#bcbd22", 40 * M: "#2ca02c", 0: "#1f77b4"}
 MARKERS = {1 * M: "v", 3 * M: "s", 10 * M: "o", 20 * M: "P", 40 * M: "^", 0: "D"}
-plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False, "figure.dpi": 130})
+GREY = "#555555"
+NOISE = "#999999"
+plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False, "figure.dpi": 130,
+                     "axes.titlesize": 10.5, "axes.titleweight": "semibold", "axes.labelsize": 9.5,
+                     "legend.fontsize": 8.5, "xtick.labelsize": 9, "ytick.labelsize": 9})
 
 
 def lab(U):
@@ -97,197 +101,305 @@ def noise(grid):
     return pooled, n, sds
 
 
-YMAX = 1.40
+def _series(grid, U):
+    """(delta, mean bpb, seed SD) for one scarcity level, sorted by delta."""
+    out = []
+    for (u, d), rs in grid.items():
+        if u != U or d <= 0:
+            continue
+        v = [r["dom"] for r in rs]
+        out.append((d, st.mean(v), st.stdev(v) if len(v) > 1 else 0.0))
+    return sorted(out)
+
+
+def _best_label(label):
+    """'δ=0.1, drop 0.1' -> 'δ=0.1, dropout 0.1'."""
+    parts = [p.strip() for p in label.split(",")]
+    return parts[0] + (", dropout " + parts[1].split()[-1] if len(parts) > 1 else "")
 
 
 def fig_main(grid, base, general_only, sd, out, best_mix):
-    fig, ax = plt.subplots(1, 2, figsize=(11, 4.2), gridspec_kw={"width_ratios": [1.5, 1]})
+    """Left: domain bpb against delta, one line per scarcity level. Right: the best gain over the domain-only baseline."""
+    fig, ax = plt.subplots(1, 2, figsize=(12.6, 4.8), gridspec_kw={"width_ratios": [1.55, 1]})
+
     a = ax[0]
     for U in U_ORDER:
-        pts = sorted((d, st.mean(r["dom"] for r in rs)) for (u, d), rs in grid.items() if u == U and d > 0)
+        pts = _series(grid, U)
         if not pts:
             continue
-        a.plot([p[0] for p in pts], [p[1] for p in pts], marker=MARKERS[U], color=COLORS[U], label=f"U={lab(U)}", lw=1.6)
-        if U in base:
-            a.axhline(base[U]["dom"], color=COLORS[U], ls=":", lw=1.1, alpha=0.8)
-        for (u, d), rs in grid.items():
-            if u != U:
-                continue
-            if len(rs) > 1:  # show individual seeds where there are several
-                a.scatter([d] * len(rs), [r["dom"] for r in rs], color=COLORS[U], s=14, alpha=0.5, zorder=3)
-            fin, best = st.mean(r["dom_final"] for r in rs), st.mean(r["dom"] for r in rs)
-            if fin - best > 0.003:  # overfit: the final weights are worse than the best-validation checkpoint
-                if fin < YMAX:
-                    a.scatter([d], [fin], facecolors="none", edgecolors=COLORS[U], s=46, marker=MARKERS[U], zorder=4)
-                else:
-                    a.annotate(f"final {fin:.2f} ↑", (d, YMAX - 0.004), fontsize=6.5, color=COLORS[U], ha="center", va="top")
+        xs = np.array([p[0] for p in pts])
+        ys = np.array([p[1] for p in pts])
+        es = np.array([p[2] for p in pts])
+        a.fill_between(xs, ys - es, ys + es, color=COLORS[U], alpha=0.15, lw=0, zorder=1)
+        a.plot(xs, ys, marker=MARKERS[U], color=COLORS[U], lw=1.9, ms=6.5, mec="white", mew=0.9, zorder=3, label=lab(U))
+        i = int(np.argmin(ys))
+        a.scatter([xs[i]], [ys[i]], s=200, facecolors="none", edgecolors=COLORS[U], lw=1.8, zorder=4)
     if general_only is not None:
-        a.axhline(general_only, color="k", ls="--", lw=1.1)
-        a.text(0.031, general_only + 0.006, "general-only (no domain data)", fontsize=8)
+        a.axhline(general_only, color=GREY, ls=(0, (4, 3)), lw=1.2, zorder=2)
+        a.text(0.0105, general_only + 0.008, "general-only (no domain data)", fontsize=8.5, color=GREY)
     a.set_xscale("log")
-    a.set_xticks([0.03, 0.1, 0.3, 0.6, 1.0])
-    a.set_xticklabels(["0.03", "0.1", "0.3", "0.6", "1.0"])
-    a.set_xlabel("domain share δ of training sequences")
-    a.set_ylabel("PubMed test bits/byte (lower is better)")
-    a.set_ylim(top=YMAX)
-    a.set_title("Domain performance vs mixture share (filled = best-val checkpoint,\nhollow = final weights if overfit; dotted = best domain-only baseline)", fontsize=9)
-    a.legend(frameon=False, fontsize=8, ncol=2, loc="upper left", bbox_to_anchor=(0.12, 0.86))
-    a.text(0.02, 0.27, f"seed SD ≈ {sd:.4f} bpb\n(pooled over 6 cells, 12 dof)", fontsize=8, color="gray", transform=a.transAxes)
+    a.set_xlim(0.008, 1.3)
+    a.set_ylim(0.965, 1.40)
+    a.set_xticks([0.01, 0.03, 0.1, 0.3, 1.0])
+    a.set_xticklabels(["0.01", "0.03", "0.1", "0.3", "1.0"])
+    a.set_xlabel("domain share δ (fraction of training tokens from PubMed)")
+    a.set_ylabel("PubMed test bits/byte  (lower is better)")
+    a.set_title("Domain accuracy vs. domain share, one line per scarcity level")
+    handles, labels = a.get_legend_handles_labels()
+    handles.append(plt.Line2D([], [], marker="o", ls="none", mfc="none", mec="#333333", mew=1.6, ms=10))
+    labels.append("best δ for that U")
+    a.legend(handles, labels, frameon=False, ncol=2, loc="lower left", handletextpad=0.4, columnspacing=1.0,
+             borderaxespad=0.6)
 
     b = ax[1]
-    Us = [U for U in sorted(set(U_ORDER + EXT_U), key=lambda u: (u == 0, u)) if U in base and U in best_mix]
+    Us = [U for U in sorted(U_ORDER, key=lambda u: (u == 0, u)) if U in base and U in best_mix]
     gains = [base[U]["dom"] - best_mix[U][0] for U in Us]
-    bestd = [best_mix[U][1] for U in Us]
-    bars = b.bar(range(len(Us)), gains, color=[COLORS[U] for U in Us], width=0.6)
-    for bar, U in zip(bars, Us):
-        if U in EXT_U:
-            bar.set_hatch("//")
-    b.axhline(0, color="k", lw=0.8)
-    b.axhspan(-2 * sd * 2**0.5, 2 * sd * 2**0.5, color="gray", alpha=0.15, lw=0)
-    for i, (g, d) in enumerate(zip(gains, bestd)):
-        b.text(i, g + (0.005 if g >= 0 else -0.006), f"{g:+.3f}\n({d})", ha="center", va="bottom" if g >= 0 else "top", fontsize=8)
-    b.set_ylim(min(min(gains) - 0.07, -0.04), max(gains) + 0.045)
-    b.set_xticks(range(len(Us)))
-    b.set_xticklabels([lab(U) for U in Us])
-    b.set_xlabel("unique domain tokens U")
-    b.set_ylabel("gain over best domain-only baseline (bpb)")
-    b.set_title("Gain from general data: best mixture vs best non-mixture\n(both may use dropout; grey = ±2σ of a difference; hatched = validation levels)", fontsize=8.5)
+    ypos = np.arange(len(Us))[::-1]
+    b.barh(ypos, gains, color=[COLORS[U] for U in Us], height=0.62, edgecolor="white", lw=0.8)
+    b.axvline(0, color="#333333", lw=1.0)
+    band = 2 * sd * 2 ** 0.5
+    b.axvspan(-band, band, color=NOISE, alpha=0.20, lw=0)
+    for y, g, U in zip(ypos, gains, Us):
+        b.text(g + (0.004 if g >= 0 else -0.004), y, f"{g:+.3f}  {_best_label(best_mix[U][1])}",
+               ha="left" if g >= 0 else "right", va="center", fontsize=8.5, color=COLORS[U])
+    b.set_yticks(ypos)
+    b.set_yticklabels([lab(U) for U in Us])
+    b.set_ylim(-0.6, len(Us) - 0.4)
+    b.set_xlim(min(gains) - 0.075, max(gains) + 0.075)
+    b.set_ylabel("unique domain tokens U")
+    b.set_xlabel("gain over best domain-only baseline (bpb)")
+    b.set_title("Best gain from mixing in general data")
+    b.text(0.5, -0.30, f"grey band = ±2σ of a difference (σ = {sd:.4f} bpb)", transform=b.transAxes,
+           ha="center", va="top", fontsize=8, color="#666666")
+
     fig.tight_layout()
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
 
 
 def fig_tradeoff(grid, general_only, general_only_gen, out):
-    fig, ax = plt.subplots(figsize=(6.4, 4.6))
-    for U in U_ORDER:
-        pts = sorted((d, st.mean(r["dom"] for r in rs), st.mean(r["gen"] for r in rs) - general_only_gen)
-                     for (u, d), rs in grid.items() if u == U and d > 0)
+    """Small multiples: domain bpb against general bpb for each scarcity level, points labelled by delta."""
+    Us = [U for U in sorted(U_ORDER, key=lambda u: (u == 0, u))
+          if any(u == U and 0 < d < 1 for (u, d) in grid)]
+    if not Us:
+        return
+    ncol = 2
+    nrow = int(np.ceil(len(Us) / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(9.6, 3.7 * nrow))
+    axes = np.atleast_1d(axes).ravel()
+    for k, U in enumerate(Us):
+        a = axes[k]
+        pts = sorted((d, st.mean(r["gen"] for r in rs), st.mean(r["dom"] for r in rs))
+                     for (u, d), rs in grid.items() if u == U and 0 < d < 1)
+        pts = [p for p in pts if not np.isnan(p[1])]
         if not pts:
+            a.set_visible(False)
             continue
-        ax.plot([p[2] for p in pts], [p[1] for p in pts], marker=MARKERS[U], color=COLORS[U], label=f"U={lab(U)}", lw=1.2)
-        for d, y, x in pts:
-            ax.annotate(f"{d:g}", (x, y), textcoords="offset points", xytext=(5, 3), fontsize=7, color=COLORS[U])
-    if general_only is not None:
-        ax.scatter([0], [general_only], marker="*", s=150, color="k", zorder=5, label="general-only")
-    ax.set_xscale("symlog", linthresh=0.02)
-    ticks = [0, 0.02, 0.05, 0.1, 0.2, 0.5]
-    ax.set_xticks(ticks)
-    ax.set_xticklabels([f"{t:g}" for t in ticks])
-    ax.set_xlim(-0.02, 1.0)
-    ax.set_xlabel("extra FineWeb-Edu test bpb vs general-only run (symlog)")
-    ax.set_ylabel("PubMed (domain) test bits/byte")
-    ax.set_title("Trade-off between domain and general ability\n(labels = δ; bottom-left is best)", fontsize=10)
-    ax.legend(frameon=False, fontsize=8)
+        xs = [p[1] for p in pts]
+        ys = [p[2] for p in pts]
+        a.plot(xs, ys, color=COLORS[U], lw=1.3, alpha=0.5, zorder=1)
+        a.scatter(xs, ys, s=70, color=COLORS[U], marker=MARKERS[U], edgecolors="white", linewidths=1.0, zorder=3)
+        best = min(pts, key=lambda p: p[2])
+        # label the two ends and the best point, but never the same point twice
+        labelled = []
+        for p in (pts[0], best, pts[-1]):
+            if any(p[0] == q[0] for q in labelled):
+                continue
+            labelled.append(p)
+            a.annotate(f"δ={p[0]:g}", (p[1], p[2]), textcoords="offset points", xytext=(9, 7), fontsize=8,
+                       color=COLORS[U], zorder=6,
+                       bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.85))
+        if len(pts) > 2:
+            a.annotate("", xy=(xs[-1], ys[-1]), xytext=(xs[-2], ys[-2]),
+                       arrowprops=dict(arrowstyle="-|>", color=COLORS[U], lw=1.2, shrinkA=6, shrinkB=6), zorder=2)
+        a.scatter([best[1]], [best[2]], s=230, facecolors="none", edgecolors=COLORS[U], lw=1.8, zorder=4)
+        a.scatter([general_only_gen], [general_only], marker="*", s=230, color="#111111", zorder=5)
+        a.axhline(general_only, color=GREY, ls=(0, (4, 3)), lw=1.0, zorder=1)
+        a.set_title(f"U = {lab(U)}")
+        a.grid(alpha=0.15, lw=0.6)
+        a.margins(x=0.22, y=0.20)
+    for k in range(len(Us), len(axes)):
+        axes[k].set_visible(False)
+    for k in range(0, len(axes), ncol):
+        axes[k].set_ylabel("PubMed test bits/byte")
+    for k in range(len(axes) - ncol, len(axes)):
+        axes[k].set_xlabel("FineWeb-Edu test bits/byte")
+    fig.suptitle("Domain/general trade-off: right = worse general ability, down = better domain ability\n"
+                 "star = general-only run, dashed line = its domain bpb, circle = best δ for that U", fontsize=10.5)
     fig.tight_layout()
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
 
 
-def fig_repetition(grid, rows, base, out):
-    fig, ax = plt.subplots(1, 2, figsize=(10.5, 4.2))
+def fig_repetition(grid, out, sd=None):
+    """Left: domain bpb against epochs over the domain data, one line per scarcity level.
+    Right: the same curves shifted to their own minimum, which shows where the repetition cost sets in."""
+    fig, ax = plt.subplots(1, 2, figsize=(12.4, 4.9), sharex=True)
+    handles, labels = [], []
+
     a = ax[0]
-    for d, ls in ((0.1, "-"), (0.3, "-")):
-        pts = sorted((st.mean(r["epochs"] for r in rs), st.mean(r["dom"] for r in rs)) for (u, dd), rs in grid.items() if dd == d and u != 0)
-        fresh = grid.get((0, d))
-        if fresh:
-            pts = [(st.mean(r["epochs"] for r in fresh), st.mean(r["dom"] for r in fresh))] + pts
-        a.plot([p[0] for p in pts], [p[1] for p in pts], marker="o", ls=ls, label=f"δ={d}")
+    for U in U_ORDER:
+        pts = sorted((st.mean(r["epochs"] for r in rs), st.mean(r["dom"] for r in rs))
+                     for (u, d), rs in grid.items() if u == U and d > 0)
+        if not pts:
+            continue
+        ln, = a.plot([p[0] for p in pts], [p[1] for p in pts], marker=MARKERS[U], color=COLORS[U], lw=1.8, ms=6.5,
+                     mec="white", mew=0.9, label=lab(U))
+        handles.append(ln)
+        labels.append(lab(U))
+        i = int(np.argmin([p[1] for p in pts]))
+        a.scatter([pts[i][0]], [pts[i][1]], s=190, facecolors="none", edgecolors=COLORS[U], lw=1.7, zorder=4)
+    a.axvspan(8, 15, color=NOISE, alpha=0.16, lw=0, zorder=0)
+    a.text(11, 1.395, "8–15 epochs: the optimum for U ≤ 10M", ha="center", fontsize=8, color="#555555")
     a.set_xscale("log")
-    a.set_xticks([0.2, 0.5, 1, 2, 5, 10, 30])
-    a.set_xticklabels(["0.2", "0.5", "1", "2", "5", "10", "30"])
-    a.set_xlabel("epochs over the domain data")
+    a.set_xlim(0.012, 200)
+    a.set_ylim(0.96, 1.42)
+    a.set_xticks([0.02, 0.1, 1, 10, 100])
+    a.set_xticklabels(["0.02", "0.1", "1", "10", "100"])
+    a.set_xlabel("epochs over the domain data  (δ·B / U)")
     a.set_ylabel("PubMed test bits/byte")
-    a.set_title("Cost of repeating domain data at fixed δ", fontsize=10)
-    a.legend(frameon=False, fontsize=8, title="U varies along each line", title_fontsize=8)
+    a.set_title("Domain accuracy vs. how often the domain data is repeated")
+
     b = ax[1]
     for U in U_ORDER:
-        ctl = sorted((r["epochs"], r["dom"], r["lr"]) for r in rows if r["name"].startswith("C_U") and r["U"] == U and r["dropout"] == 0)
-        if not ctl:
+        pts = sorted((st.mean(r["epochs"] for r in rs), st.mean(r["dom"] for r in rs))
+                     for (u, d), rs in grid.items() if u == U and d > 0)
+        if not pts:
             continue
-        lo = collections.defaultdict(lambda: np.inf)
-        for e, y, _ in ctl:
-            lo[e] = min(lo[e], y)
-        es = sorted(lo)
-        b.plot(es, [lo[e] for e in es], marker=MARKERS[U], color=COLORS[U], label=f"U={lab(U)}", lw=1.2)
+        lo = min(p[1] for p in pts)
+        b.plot([p[0] for p in pts], [p[1] - lo for p in pts], marker=MARKERS[U], color=COLORS[U], lw=1.8, ms=6.5,
+               mec="white", mew=0.9)
+    b.axvspan(8, 15, color=NOISE, alpha=0.16, lw=0, zorder=0)
+    b.axhline(0, color="#333333", lw=1.0)
+    if sd:
+        b.axhspan(0, 2 * sd * 2 ** 0.5, color=NOISE, alpha=0.22, lw=0, zorder=0)
+        b.annotate("2σ of a difference", xy=(0.985, 2 * sd * 2 ** 0.5), xycoords=("axes fraction", "data"),
+                   textcoords="offset points", xytext=(0, 3), ha="right", fontsize=8, color="#555555")
     b.set_xscale("log")
-    b.set_xticks([2, 3, 5, 10, 20, 30])
-    b.set_xticklabels(["2", "3", "5", "10", "20", "30"])
-    b.set_xlabel("epochs (each run has its own full LR schedule)")
-    b.set_ylabel("PubMed test bits/byte")
-    b.set_title("Fair domain-only baselines: best of lr and 2·lr", fontsize=10)
-    b.legend(frameon=False, fontsize=8)
-    fig.tight_layout()
+    b.set_xlim(0.012, 200)
+    b.set_ylim(-0.012, 0.30)
+    b.set_xticks([0.02, 0.1, 1, 10, 100])
+    b.set_xticklabels(["0.02", "0.1", "1", "10", "100"])
+    b.set_xlabel("epochs over the domain data  (δ·B / U)")
+    b.set_ylabel("PubMed bpb − best for that U")
+    b.set_title("Shifted to each level's own best: the cost sets in past ~15 epochs")
+    b.annotate("← too little domain data seen", xy=(0.015, 0.985), xycoords="axes fraction",
+               fontsize=8.5, color="#555555", ha="left", va="top")
+    b.annotate("too many epochs (repetition) →", xy=(0.985, 0.985), xycoords="axes fraction", fontsize=8.5,
+               color="#555555", ha="right", va="top")
+
+    fig.legend(handles, labels, frameon=False, ncol=4, loc="lower center", bbox_to_anchor=(0.5, -0.02),
+               title="unique domain tokens", title_fontsize=8.5)
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
 
 
 def fig_rule(grid, sd, out, B=300 * M, e_star=10, u_abundant=550 * M):
-    """Left: the new scarcity levels with the rule's predicted best delta. Right: observed optimum plateau vs the rule."""
+    """Left: the out-of-sample scarcity levels with the rule's predicted delta. Right: observed optimum vs the rule."""
     thr = 2 * sd * 2 ** 0.5
-    fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
-    a = ax[0]
-    for U in EXT_U:
-        pts = sorted((d, st.mean(r["dom"] for r in rs), st.mean(r["epochs"] for r in rs)) for (u, d), rs in grid.items() if u == U)
+    fig = plt.figure(figsize=(12.4, 5.0))
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.0, 1.05], hspace=0.42, wspace=0.24)
+    left = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[1, 0])]
+
+    for a, U in zip(left, EXT_U):
+        pts = sorted((d, st.mean(r["dom"] for r in rs)) for (u, d), rs in grid.items() if u == U)
         if not pts:
+            a.set_visible(False)
             continue
-        a.plot([p[0] for p in pts], [p[1] for p in pts], marker=MARKERS[U], color=COLORS[U], label=f"U={lab(U)}", lw=1.6)
-        for d, y, ep in pts:
-            a.annotate(f"{ep:.0f} ep", (d, y), textcoords="offset points", xytext=(5, 5), fontsize=7, color=COLORS[U])
-        a.axvline(min(1.0, e_star * U / B), color=COLORS[U], ls="--", lw=1)
-    a.set_xscale("log")
-    a.set_xticks([0.01, 0.03, 0.1, 0.3, 0.67, 1.0])
-    a.set_xticklabels(["0.01", "0.03", "0.1", "0.3", "0.67", "1"])
-    a.set_xlabel("domain share δ")
-    a.set_ylabel("PubMed test bits/byte")
-    a.set_title("Out-of-sample levels (dashed = predicted best δ)", fontsize=10)
-    a.legend(frameon=False, fontsize=8)
-    b = ax[1]
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        best = min(ys)
+        a.axhspan(best, best + thr, color=COLORS[U], alpha=0.16, lw=0, zorder=0)
+        a.plot(xs, ys, marker=MARKERS[U], color=COLORS[U], lw=1.9, ms=7, mec="white", mew=0.9, zorder=3)
+        i = int(np.argmin(ys))
+        a.scatter([xs[i]], [ys[i]], s=190, facecolors="none", edgecolors=COLORS[U], lw=1.8, zorder=4)
+        pred = min(1.0, e_star * U / B)
+        a.axvline(pred, color=COLORS[U], ls="--", lw=1.3, zorder=1)
+        a.annotate(f"rule δ*={pred:.2f}", (pred, 0.97), xycoords=("data", "axes fraction"), textcoords="offset points",
+                   xytext=(-5, 0), fontsize=8, color=COLORS[U], rotation=90, va="top", ha="right")
+        a.annotate(f"best δ={xs[i]:g}", (xs[i], ys[i]), textcoords="offset points", xytext=(10, -12), fontsize=8,
+                   color=COLORS[U])
+        a.set_xscale("log")
+        a.set_xlim(0.008, 1.3)
+        a.set_ylim(best - 0.035, max(ys) + 0.02)
+        a.set_xticks([0.01, 0.03, 0.1, 0.3, 1.0])
+        a.set_xticklabels(["0.01", "0.03", "0.1", "0.3", "1"])
+        a.set_ylabel("PubMed bpb")
+        a.set_title(f"U = {lab(U)} (out of sample)", fontsize=9.5)
+        a.grid(alpha=0.15, lw=0.6)
+    left[1].set_xlabel("domain share δ")
+    left[0].text(0.98, 0.06, "shaded = δ within 2σ of the best", transform=left[0].transAxes, ha="right", va="bottom",
+                 fontsize=8, color="#666666")
+
+    b = fig.add_subplot(gs[:, 1])
     Ug = np.logspace(np.log10(0.6e6), np.log10(700e6), 100)
-    b.plot(Ug / M, np.minimum(1.0, e_star * Ug / B), "k--", lw=1.2, label=f"pre-registered: δ* = min(1, {e_star}·U/B)")
-    b.plot(Ug / M, np.minimum(1.0, 15 * Ug / B), color="gray", ls=":", lw=1.4, label="refit on the finer grid: 15·U/B")
+    b.plot(Ug / M, np.minimum(1.0, e_star * Ug / B), "k--", lw=1.4, label=f"rule: δ* = min(1, {e_star}·U/B)")
+    b.plot(Ug / M, np.minimum(1.0, 15 * Ug / B), color="#888888", ls=":", lw=1.6, label="refit: 15·U/B")
     for U in sorted({u for (u, d) in grid}, key=lambda u: (u == 0, u)):
         means = {d: st.mean(r["dom"] for r in rs) for (u, d), rs in grid.items() if u == U}
-        if len(means) < 3:  # need at least 3 deltas to say where the optimum is
+        if len(means) < 3:
             continue
         best = min(means, key=means.get)
         tie = [d for d, v in means.items() if v <= means[best] + thr]
         x = (u_abundant if U == 0 else U) / M
-        b.plot([x, x], [min(tie), max(tie)], color=COLORS[U], lw=4, alpha=0.45, solid_capstyle="round")
-        b.scatter([x], [best], color=COLORS[U] if U not in EXT_U else "white", edgecolors=COLORS[U], s=50, zorder=3, marker=MARKERS[U])
+        b.plot([x, x], [min(tie), max(tie)], color=COLORS[U], lw=5, alpha=0.35, solid_capstyle="round", zorder=2)
+        b.scatter([x], [best], color=COLORS[U] if U not in EXT_U else "white", edgecolors=COLORS[U], s=80,
+                  zorder=3, marker=MARKERS[U], lw=1.7)
     b.set_xscale("log")
     b.set_yscale("log")
     b.set_yticks([0.03, 0.1, 0.3, 1.0])
     b.set_yticklabels(["0.03", "0.1", "0.3", "1"])
     b.set_xlabel("unique domain tokens U (millions; abundant plotted at 550M)")
     b.set_ylabel("best domain share δ")
-    b.set_title("Observed optimum (bar = δ values tied with the best within 2σ)\nhollow = new levels, never used to set the rule", fontsize=9)
-    b.legend(frameon=False, fontsize=8, loc="upper left")
-    fig.tight_layout()
+    b.set_title("Observed optimum vs the rule")
+    b.legend(frameon=False, loc="upper left")
+    b.text(0.98, 0.03, "bars = δ tied with the best within 2σ\nhollow = out-of-sample levels\n"
+                       "the rule is right at 20M and ~1.5× too low for 1M–10M",
+           transform=b.transAxes, ha="right", va="bottom", fontsize=8, color="#666666")
+
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
 
 
 def fig_horizon(rows, grid, out, U=10 * M):
-    """Optimum at half the horizon (150M tokens) vs the standard 300M, at U=10M, in delta and in domain epochs."""
+    """U=10M at 300M vs 150M training tokens: the best delta moves, the best epoch count stays in the same band."""
     short = sorted((r["delta"], r["dom"], r["epochs"]) for r in rows
                    if r["name"].startswith("S_") and r["U"] == U and r["tokens"] == 150 * M and r["dropout"] == 0)
-    full = sorted((d, st.mean(r["dom"] for r in rs), st.mean(r["epochs"] for r in rs)) for (u, d), rs in grid.items() if u == U and d > 0)
+    full = sorted((d, st.mean(r["dom"] for r in rs), st.mean(r["epochs"] for r in rs))
+                  for (u, d), rs in grid.items() if u == U and d > 0)
     if not short:
         return False
-    fig, ax = plt.subplots(1, 2, figsize=(10.5, 4.0))
-    for a_, xi, xlabel in ((ax[0], 0, "domain share δ"), (ax[1], 2, "epochs over the domain data")):
-        a_.plot([p[xi] for p in full], [p[1] for p in full], marker="o", color="#ff7f0e", label="300M tokens (45 min)")
-        a_.plot([p[xi] for p in short], [p[1] for p in short], marker="s", color="#9467bd", label="150M tokens")
-        a_.set_xscale("log")
-        a_.set_xlabel(xlabel)
-        a_.set_ylabel("PubMed test bits/byte")
-        a_.legend(frameon=False, fontsize=8)
-    ax[0].set_xticks([0.03, 0.1, 0.2, 0.3, 0.45, 0.67, 1.0])
-    ax[0].set_xticklabels(["0.03", "0.1", "0.2", "0.3", "0.45", "0.67", "1"])
-    ax[1].set_xticks([3, 5, 10, 15, 30])
-    ax[1].set_xticklabels(["3", "5", "10", "15", "30"])
-    ax[0].set_title(f"U={U // M}M: best δ is larger at the shorter horizon (150M grid is coarse: 3 points)", fontsize=9)
-    ax[1].set_title("in epochs the optimum is similar (about 10 vs 13)", fontsize=9)
+    fig, a = plt.subplots(figsize=(7.8, 4.8))
+    a.axvspan(8, 15, color=NOISE, alpha=0.16, lw=0, zorder=0)
+    for pts, color, marker, name, off in ((full, "#e08214", "o", "300M tokens (full budget)", (16, -14)),
+                                          (short, "#54278f", "s", "150M tokens (half budget)", (-16, -20))):
+        xs = [p[2] for p in pts]
+        ys = [p[1] for p in pts]
+        a.plot(xs, ys, marker=marker, color=color, lw=1.9, ms=7, mec="white", mew=0.9, label=name, zorder=3)
+        i = int(np.argmin(ys))
+        a.scatter([xs[i]], [ys[i]], s=210, facecolors="none", edgecolors=color, lw=1.8, zorder=4)
+        a.annotate(f"best δ={pts[i][0]:g} ({pts[i][2]:.0f} ep)", (xs[i], ys[i]), textcoords="offset points",
+                   xytext=off, ha="left" if off[0] > 0 else "right", fontsize=8.5, color=color, fontweight="semibold",
+                   zorder=6, bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
+        for k, (d, y, ep) in enumerate(pts):
+            if k == i or k not in (0, len(pts) - 1):
+                continue  # the best point has its own label; the interior points are read off the curve
+            a.annotate(f"δ={d:g}", (ep, y), textcoords="offset points", xytext=(0, 10), ha="center", va="bottom",
+                       fontsize=7.5, color=color, alpha=0.9, zorder=6,
+                       bbox=dict(boxstyle="round,pad=0.10", fc="white", ec="none", alpha=0.8))
+    a.set_xscale("log")
+    a.set_xlim(0.7, 45)
+    a.set_ylim(1.065, 1.25)
+    a.set_xticks([1, 3, 5, 10, 15, 30])
+    a.set_xticklabels(["1", "3", "5", "10", "15", "30"])
+    a.set_xlabel("epochs over the domain data  (δ·B / U)")
+    a.set_ylabel("PubMed test bits/byte")
+    a.set_title("U = 10M: halving the token budget moves the best δ, not the best epoch count")
+    a.legend(frameon=False, loc="upper right")
+    a.grid(alpha=0.15, lw=0.6)
+    fig.text(0.5, -0.02, "shaded = 8–15 epochs. The 150M grid has only 3 points, so its optimum is bracketed to ~10–14 epochs.",
+             ha="center", va="top", fontsize=8, color="#555555")
     fig.tight_layout()
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
@@ -295,30 +407,44 @@ def fig_horizon(rows, grid, out, U=10 * M):
 
 
 def fig_heatmap(grid, base, out):
+    """The same numbers as fig1, as a grid: gain in bpb over the best domain-only baseline for each (U, delta)."""
     Us = [U for U in U_ORDER if U in base and any(u == U for (u, d) in grid)]
     ds = [d for d in (0.03, 0.1, 0.3, 0.6, 1.0) if any(dd == d for (_, dd) in grid)]
     Z = np.full((len(Us), len(ds)), np.nan)
+    E = np.full((len(Us), len(ds)), np.nan)
     for i, U in enumerate(Us):
         for j, d in enumerate(ds):
             if (U, d) in grid:
-                Z[i, j] = st.mean(r["dom"] for r in grid[(U, d)]) - base[U]["dom"]
-    fig, ax = plt.subplots(figsize=(7.2, 3.6))
+                Z[i, j] = base[U]["dom"] - st.mean(r["dom"] for r in grid[(U, d)])  # positive = mixing helps
+                E[i, j] = st.mean(r["epochs"] for r in grid[(U, d)])
+    fig, ax = plt.subplots(figsize=(8.6, 4.3))
     lim = np.nanmax(np.abs(Z))
     im = ax.imshow(Z, cmap="RdBu_r", vmin=-lim, vmax=lim, aspect="auto")
     ax.set_xticks(range(len(ds)))
     ax.set_xticklabels([f"{d:g}" for d in ds])
     ax.set_yticks(range(len(Us)))
     ax.set_yticklabels([lab(U) for U in Us])
+    ax.set_xticks(np.arange(-0.5, len(ds), 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, len(Us), 1), minor=True)
+    ax.grid(which="minor", color="white", lw=1.8)
+    ax.tick_params(which="minor", length=0)
     for i in range(len(Us)):
         for j in range(len(ds)):
-            if not np.isnan(Z[i, j]):
-                ep = st.mean(r["epochs"] for r in grid[(Us[i], ds[j])])
-                ax.text(j, i, f"{Z[i, j]:+.3f}\n{ep:.1f} ep", ha="center", va="center", fontsize=7,
-                        color="white" if abs(Z[i, j]) > 0.6 * lim else "black")
+            if np.isnan(Z[i, j]):
+                continue
+            dark = abs(Z[i, j]) > 0.6 * lim
+            ax.text(j, i - 0.14, f"{Z[i, j]:+.3f}", ha="center", va="center", fontsize=10.5, fontweight="bold",
+                    color="white" if dark else "#222222")
+            ax.text(j, i + 0.24, f"{E[i, j]:.1f} ep", ha="center", va="center", fontsize=7.5,
+                    color="white" if dark else "#444444")
+        jb = int(np.nanargmax(Z[i]))
+        ax.add_patch(plt.Rectangle((jb - 0.5, i - 0.5), 1, 1, fill=False, edgecolor="#111111", lw=2.0, zorder=5))
     ax.set_xlabel("domain share δ")
     ax.set_ylabel("unique domain tokens U")
-    ax.set_title("Test bpb minus best domain-only baseline for that U (blue = mixture better)\ncell text: Δbpb and epochs over the domain data", fontsize=9)
-    fig.colorbar(im, ax=ax, label="Δ bpb")
+    ax.set_title("Gain over the best domain-only baseline\nbold = Δ bpb (red = mixing helps), small = domain epochs, "
+                 "boxed = best δ", fontsize=9.5)
+    cb = fig.colorbar(im, ax=ax, pad=0.02)
+    cb.set_label("Δ PubMed bpb  (positive = mixing helps)", fontsize=9)
     fig.tight_layout()
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
@@ -343,7 +469,7 @@ def main():
     fig_main({k: v for k, v in grid.items() if k[1] > 0}, base, general_only, sd, os.path.join(a.out, "fig1_main.png"), best_mix)
     gen_only_gen = st.mean(r["gen"] for r in gen_only) if gen_only else 0.0
     fig_tradeoff(grid, general_only, gen_only_gen, os.path.join(a.out, "fig2_tradeoff.png"))
-    fig_repetition({k: v for k, v in grid.items() if k[1] > 0}, rows, base, os.path.join(a.out, "fig3_repetition.png"))
+    fig_repetition({k: v for k, v in grid.items() if k[1] > 0}, os.path.join(a.out, "fig3_repetition.png"), sd)
     fig_heatmap({k: v for k, v in grid.items() if k[1] > 0}, base, os.path.join(a.out, "fig4_heatmap.png"))
     n_fig = 4
     if any(u in EXT_U for (u, d) in grid):
