@@ -20,7 +20,7 @@ import numpy as np
 
 M = 1_000_000
 U_ORDER = [3 * M, 10 * M, 40 * M, 0]  # the main grid; 0 = all available domain data (abundant)
-EXT_U = [1 * M, 20 * M]              # extra scarcity levels used only as an out-of-sample test of the delta* rule
+EXT_U = [1 * M, 20 * M]              # extra scarcity levels used only as an out-of-sample test of the constant-epochs fit
 COLORS = {1 * M: "#8c564b", 3 * M: "#d62728", 10 * M: "#ff7f0e", 20 * M: "#bcbd22", 40 * M: "#2ca02c", 0: "#1f77b4"}
 MARKERS = {1 * M: "v", 3 * M: "s", 10 * M: "o", 20 * M: "P", 40 * M: "^", 0: "D"}
 GREY = "#555555"
@@ -295,9 +295,53 @@ def fig_repetition(grid, out, sd=None):
     plt.close(fig)
 
 
-def fig_rule(grid, sd, out, B=300 * M, e_star=10, u_abundant=550 * M):
-    """Left: the out-of-sample scarcity levels with the rule's predicted delta. Right: observed optimum vs the rule."""
+def fit_epochs(grid, B=300 * M, holdout=(), sd=None):
+    """Constant-epochs fit through the observed optima: delta* = E*U/B, fitted in log space so every level counts
+    equally in relative terms. Levels whose optimum is delta=1 are saturated (censored) and carry no information
+    about E, so they are left out, as are the `holdout` levels that the left panels test.
+
+    With `sd` the per-level 2-sigma tie band is converted into a range of epochs, and the ranges of the levels the
+    fit used are intersected: that intersection is the band of E consistent with all of them. Returns
+    (E, [(U, best delta), ...], (E_lo, E_hi)) where the list is the points the fit used."""
+    pts = []
+    for U in sorted({u for (u, d) in grid if u > 0 and u not in holdout}):
+        means = {d: st.mean(r["dom"] for r in rs) for (u, d), rs in grid.items() if u == U}
+        if len(means) < 3:
+            continue
+        best = min(means, key=means.get)
+        if best < 1.0:
+            pts.append((U, best))
+    if not pts:
+        return np.nan, pts, (np.nan, np.nan)
+    e_fit = float(np.exp(np.mean([np.log(d * B / U) for U, d in pts])))
+    if sd is None:
+        return e_fit, pts, (np.nan, np.nan)
     thr = 2 * sd * 2 ** 0.5
+    lo, hi = -np.inf, np.inf
+    for U, _ in pts:
+        series = sorted((d, st.mean(r["dom"] for r in rs)) for (u, d), rs in grid.items() if u == U)
+        xs = [p[0] for p in series]
+        ys = [p[1] for p in series]
+        level = min(ys) + thr
+        cross = []
+        for i in range(len(xs) - 1):
+            y0, y1 = ys[i], ys[i + 1]
+            if (y0 - level) * (y1 - level) <= 0 and y0 != y1:
+                cross.append(xs[i] + (level - y0) / (y1 - y0) * (xs[i + 1] - xs[i]))
+        if not cross:
+            continue
+        lo = max(lo, min(cross) * B / U)
+        hi = min(hi, max(cross) * B / U)
+    return e_fit, pts, (lo, hi)
+
+
+def fig_rule(grid, sd, out, B=300 * M, u_abundant=550 * M):
+    """Left: the out-of-sample scarcity levels with the fitted delta. Right: observed optimum vs a constant-epochs
+    fit, drawn as a band of epochs consistent with the in-sample levels. No rule is proposed, so the figure shows
+    one empirical fit and its uncertainty instead of competing lines."""
+    thr = 2 * sd * 2 ** 0.5
+    e_fit, fit_pts, (e_lo, e_hi) = fit_epochs(grid, B, holdout=EXT_U, sd=sd)
+    band = np.isfinite(e_lo) and np.isfinite(e_hi) and e_hi > e_lo
     fig = plt.figure(figsize=(12.4, 5.0))
     gs = fig.add_gridspec(2, 2, width_ratios=[1.0, 1.05], hspace=0.42, wspace=0.24)
     left = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[1, 0])]
@@ -314,9 +358,9 @@ def fig_rule(grid, sd, out, B=300 * M, e_star=10, u_abundant=550 * M):
         a.plot(xs, ys, marker=MARKERS[U], color=COLORS[U], lw=1.9, ms=7, mec="white", mew=0.9, zorder=3)
         i = int(np.argmin(ys))
         a.scatter([xs[i]], [ys[i]], s=190, facecolors="none", edgecolors=COLORS[U], lw=1.8, zorder=4)
-        pred = min(1.0, e_star * U / B)
+        pred = min(1.0, e_fit * U / B)
         a.axvline(pred, color=COLORS[U], ls="--", lw=1.3, zorder=1)
-        a.annotate(f"rule δ*={pred:.2f}", (pred, 0.97), xycoords=("data", "axes fraction"), textcoords="offset points",
+        a.annotate(f"fit δ*={pred:.2f}", (pred, 0.97), xycoords=("data", "axes fraction"), textcoords="offset points",
                    xytext=(-5, 0), fontsize=8, color=COLORS[U], rotation=90, va="top", ha="right")
         a.annotate(f"best δ={xs[i]:g}", (xs[i], ys[i]), textcoords="offset points", xytext=(10, -12), fontsize=8,
                    color=COLORS[U])
@@ -334,8 +378,14 @@ def fig_rule(grid, sd, out, B=300 * M, e_star=10, u_abundant=550 * M):
 
     b = fig.add_subplot(gs[:, 1])
     Ug = np.logspace(np.log10(0.6e6), np.log10(700e6), 100)
-    b.plot(Ug / M, np.minimum(1.0, e_star * Ug / B), "k--", lw=1.4, label=f"rule: δ* = min(1, {e_star}·U/B)")
-    b.plot(Ug / M, np.minimum(1.0, 15 * Ug / B), color="#888888", ls=":", lw=1.6, label="refit: 15·U/B")
+    if band:
+        b.fill_between(Ug / M, np.minimum(1.0, e_lo * Ug / B), np.minimum(1.0, e_hi * Ug / B),
+                       color="#333333", alpha=0.13, lw=0, zorder=0)
+    b.plot(Ug / M, np.minimum(1.0, e_fit * Ug / B), "k--", lw=1.4, zorder=1)
+    label = f"constant epochs\nδ* = min(1, {e_fit:.0f}·U/B)"
+    if band:
+        label += f"\nband: E = {e_lo:.0f}–{e_hi:.0f} (2σ)"
+    b.annotate(label, (0.62, 0.30), fontsize=8.5, color="#222222", ha="left", va="bottom")
     for U in sorted({u for (u, d) in grid}, key=lambda u: (u == 0, u)):
         means = {d: st.mean(r["dom"] for r in rs) for (u, d), rs in grid.items() if u == U}
         if len(means) < 3:
@@ -352,10 +402,10 @@ def fig_rule(grid, sd, out, B=300 * M, e_star=10, u_abundant=550 * M):
     b.set_yticklabels(["0.03", "0.1", "0.3", "1"])
     b.set_xlabel("unique domain tokens U (millions; abundant plotted at 550M)")
     b.set_ylabel("best domain share δ")
-    b.set_title("Observed optimum vs the rule")
-    b.legend(frameon=False, loc="upper left")
+    b.set_title("Observed optimum vs a constant-epochs fit")
     b.text(0.98, 0.03, "bars = δ tied with the best within 2σ\nhollow = out-of-sample levels\n"
-                       "the rule is right at 20M and ~1.5× too low for 1M–10M",
+                       f"band = epochs consistent with the {len(fit_pts)} unsaturated in-sample levels\n"
+                       "(40M is already at δ=1, so it does not constrain E)",
            transform=b.transAxes, ha="right", va="bottom", fontsize=8, color="#666666")
 
     fig.savefig(out, bbox_inches="tight")
@@ -473,6 +523,11 @@ def main():
     fig_heatmap({k: v for k, v in grid.items() if k[1] > 0}, base, os.path.join(a.out, "fig4_heatmap.png"))
     n_fig = 4
     if any(u in EXT_U for (u, d) in grid):
+        e_fit, fit_pts, (e_lo, e_hi) = fit_epochs({k: v for k, v in grid.items() if k[1] > 0}, holdout=EXT_U, sd=sd)
+        print("\nconstant-epochs fit (delta* = E*U/B, out-of-sample levels held out):")
+        print(f"  E = {e_fit:.1f} epochs from " + ", ".join(f"U={lab(U)} (best delta={d:g})" for U, d in fit_pts))
+        if np.isfinite(e_lo) and np.isfinite(e_hi):
+            print(f"  epochs consistent with all of them at 2 sigma: E = {e_lo:.1f}-{e_hi:.1f}")
         fig_rule({k: v for k, v in grid.items() if k[1] > 0}, sd, os.path.join(a.out, "fig5_rule.png"))
         n_fig = 5
 

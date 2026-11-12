@@ -73,7 +73,7 @@ Pause the queue while scoring: sharing the GPU slows training runs and can trip 
 ## What the report figures and tables come from
 | report item | produced by | input |
 |---|---|---|
-| Fig. 1 main result, Fig. 2 trade-off, Fig. 3 repetition, Fig. 4 heatmap, Fig. 5 rule check, Fig. 6 horizon | `code/analyze.py` | `results/results.csv` |
+| Fig. 1 main result, Fig. 2 trade-off, Fig. 3 repetition, Fig. 4 heatmap, Fig. 5 constant-epochs fit check, Fig. 6 horizon | `code/analyze.py` | `results/results.csv` |
 | Fig. 7 similarity, Fig. 8 score distribution | `code/analyze_similarity.py` | `runs/`, `results/pools_summary.json` (`scores.npz` for Fig. 8 only) |
 | noise estimate, gain table | printed by `code/analyze.py` | `results/results.csv` |
 TODO: adjust figure numbers to match the final report.
