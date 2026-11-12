@@ -12,7 +12,6 @@ code/generate.py
 __pycache__/
 *.pyc
 .venv*/
-RCOm-windows-gfx1030/
 .cache/
 .env
 
