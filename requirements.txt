@@ -1,8 +1,10 @@
-# Direct dependencies besides PyTorch (see ROCm/README.md). TODO: pin the versions from your environment:
-#   pip freeze | findstr /i "numpy tokenizers pyarrow datasets huggingface matplotlib"
-numpy
-tokenizers
-pyarrow
-datasets
-huggingface_hub
-matplotlib
+# Direct dependencies besides PyTorch.
+# PyTorch is NOT listed here: it must be the AMD ROCm gfx103X nightly build, installed by
+# RCOm-windows-gfx1030/scripts/setup-nightly.bat (see RCOm-windows-gfx1030/README.md).
+# Versions below are the ones used for the reported runs (Python 3.12.16).
+numpy==2.5.4
+tokenizers==0.23.3
+pyarrow==26.0.0
+datasets==5.1.0
+huggingface_hub==2.4.0
+matplotlib==3.11.2
