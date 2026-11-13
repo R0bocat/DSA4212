@@ -74,7 +74,7 @@ where $\bar{\ell}$ is the mean loss of nats per token. Bits per byte was chosen 
 The data was then lightly filtered, removing duplicates, paragraphs that are likely not in english (by detecting presence of stopwords) and paragraphs that were too short. The documents were then split into train, validation and test by a
 deterministic hash; validation and test contain about 1.1M tokens each while train contains about 550M tokens.
 
-\paragraph{General: FineWeb-Edu.} For the FineWeb data, it was taken from HuggingFaceFW/fineweb-edu and the shard used was sample/10BT/000$\_$00000.parquet; License: ODC-By 1.0 \citep{penedo2024fineweb} which contains about 430M tokens. It went through the same light filtering and also was deduplicated with the PubMed data in case there was any overlapping files. Only two fully duplicated abstract was found and removed before any run.
+\paragraph{General: FineWeb-Edu.} For the FineWeb data, it was taken from HuggingFaceFW/fineweb-edu and the shard used was sample/10BT/000$\_$00000.parquet; License: ODC-By 1.0 \citep{penedo2024fineweb} which contains about 430M tokens. It went through the same light filtering and also was deduplicated with the PubMed data in case there was any overlapping files. Only two fully duplicated abstracts was found and removed before any run.
 
 \paragraph{Scarcity.} The domain corpus available to a run is the first $U$ tokens of the (shuffled) PubMed training
 stream, $U\in\{1,3,10,20,40\text{M}, \text{all}\approx 550\text{M}\}$, and the number of passes the model makes over the domain corpus is defined as $E=\delta \frac{B}{U}$, where B is the token budget.
@@ -105,7 +105,7 @@ Evaluation & every 2000 steps on validation data; test numbers are taken at the 
 
 \paragraph{Baselines.} Domain-only runs may stop early and each gets its own full learning-rate schedule, at $1\times$ and $2\times$ the base rate, with and without dropout. This differs from the $1.0\delta$ runs which simply continue overtraining the data until the 300M token budget. The general-only runs are also a baseline for every $U$.
 
-\paragraph{Noise.} Pooled seed standard deviation $0.0034$~\bpb{} (14 degrees of freedom, 7 cells with repeats). A difference between two single runs therefore needs about $0.0095$~\bpb{} ($\frac{2\sigma}{\sqrt{2}}$) to be statistically significant. Since most of the cells are single-seed, choosing the best configuration may be optimistic and could be
+\paragraph{Noise.} Pooled seed standard deviation $0.0034$~\bpb{} (14 degrees of freedom, 7 cells with repeats). A difference between two single runs therefore needs about $0.0095$~\bpb{} ($2\sigma\sqrt{2}$) to be statistically significant. Since most of the cells are single-seed, choosing the best configuration may be optimistic and could be
 $0.003$--$0.005$~\bpb{} better than what it would achieve on average.
 
 \section{Results}
@@ -233,7 +233,7 @@ Similarity is the mean score of the pool according to formula. (PubMed's own doc
 \subsection{Hypotheses.} 
 \begin{table}[h]\centering\small
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}l 1 p{9.8cm}@{}}\toprule
+\begin{tabular}{@{}l l p{9.8cm}@{}}\toprule
  & Verdict & Evidence \\\midrule
 \textbf{H1} (Adding General Data) & Partially supported & Mixing improves domain \bpb{} only when data is scarce (\(+0.128\) at \(U=3\)M), but hurts when data is abundant (\(-0.031\) at \(U=\text{all}\)). See Table~\ref{tab:gain}. \\
 \textbf{H2} (Diminishing returns) & Supported & The gain from mixing drops monotonically as \(U\) increases, eventually crossing zero between \(U=20\)M and \(U=40\)M. \\

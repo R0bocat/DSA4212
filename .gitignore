@@ -17,5 +17,22 @@ __pycache__/
 .cache/
 .env
 
+# ---- LaTeX build artifacts (report/report.tex is the source; regenerate with pdflatex) ----
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.nav
+*.snm
+*.vrb
+report/report.pdf
+
 # NOTE: do NOT ignore *.json / *.jsonl / *.csv -- runs/*/summary.json, runs/*/log.jsonl and results/*.csv are the
 # saved numerical results and are small.
